@@ -16,7 +16,7 @@
             color: white;
         }
         button {
-            margin: 20px;
+            margin: 10px;
             padding: 10px 20px;
             font-size: 16px;
             cursor: pointer;
@@ -38,6 +38,13 @@
             font-weight: 300;
             letter-spacing: 2px;
         }
+        #controls {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+            margin: 20px 0;
+        }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/addons/p5.sound.min.js"></script>
@@ -46,6 +53,14 @@
 <body>
     <h1>Sound Visualizer</h1>
     <button id="startButton">Start Microphone</button>
+    <div id="controls">
+        <button onclick="changeStyle(1)">Fractal</button>
+        <button onclick="changeStyle(2)">Circles</button>
+        <button onclick="changeStyle(3)">Waves</button>
+        <button onclick="changeStyle(4)">Particles</button>
+        <button onclick="changeStyle(5)">Spectrum</button>
+        <button onclick="changeStyle(6)">Matrix</button>
+    </div>
     <div id="canvas-container"></div>
 </body>
 </html>
