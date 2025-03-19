@@ -1,162 +1,137 @@
 let mic, fft;
 let started = false;
+let currentStyle = 1;
+let spectrum;
+let waveform;
 let angle = 0;
-let rings = 5;
-let particles = [];
 
 function setup() {
-    const canvas = createCanvas(windowWidth * 0.8, windowHeight * 0.6);
+    const canvas = createCanvas(windowWidth * 0.8, windowHeight * 0.6, WebGL);
     canvas.parent('canvas-container');
     
     mic = new p5.AudioIn();
     fft = new p5.FFT(0.8, 1024);
     fft.setInput(mic);
     
-    colorMode(HSB);
-    angleMode(DEGREES);
-    
-    // Initialize particles
-    for (let i = 0; i < 200; i++) {
-        particles.push(new Particle());
-    }
+    colorMode(RGB);
     
     const startButton = select('#startButton');
     startButton.mousePressed(toggleAudio);
 }
 
 function draw() {
-    background(0, 0, 0, 15);
-    translate(width/2, height/2);
+    background(0);
     
     if (started) {
-        let spectrum = fft.analyze();
-        let bass = fft.getEnergy("bass");
-        let mid = fft.getEnergy("mid");
-        let treble = fft.getEnergy("treble");
+        spectrum = fft.analyze();
+        waveform = fft.waveform();
         
-        // Rotate based on bass
-        angle += map(bass, 0, 255, 0.1, 1);
-        
-        // Draw main mandala
-        for (let ring = 0; ring < rings; ring++) {
-            let ringRadius = map(ring, 0, rings - 1, 50, 200);
-            let segments = 12 + ring * 4;
-            
-            push();
-            rotate(angle * (ring % 2 ? -0.5 : 0.5));
-            
-            // Draw segments
-            for (let i = 0; i < segments; i++) {
-                let segmentAngle = (360 / segments) * i;
-                let energy = map(spectrum[i % spectrum.length], 0, 255, 0.5, 1.5);
-                
-                push();
-                rotate(segmentAngle);
-                
-                // Draw geometric pattern
-                beginShape();
-                noFill();
-                for (let j = 0; j < 3; j++) {
-                    let alpha = map(j, 0, 2, 1, 0.2);
-                    stroke(200 + ring * 10, 80, 100, alpha);
-                    strokeWeight(2 - j * 0.5);
-                    
-                    let x1 = ringRadius * energy;
-                    let x2 = (ringRadius + 20) * energy;
-                    
-                    vertex(x1 * cos(0), x1 * sin(0));
-                    bezierVertex(
-                        x2 * cos(30), x2 * sin(30),
-                        x2 * cos(60), x2 * sin(60),
-                        x1 * cos(90), x1 * sin(90)
-                    );
-                }
-                endShape();
-                pop();
-            }
-            pop();
+        switch(currentStyle) {
+            case 1:
+                drawWaveLayers();
+                break;
+            case 2:
+                drawSpectrumBars();
+                break;
+            case 3:
+                draw3DBlob();
+                break;
+            // Add more cases for other styles
         }
-        
-        // Update and draw particles
-        for (let particle of particles) {
-            particle.update(bass, mid, treble);
-            particle.draw();
-        }
-        
-        // Draw center mandala
-        push();
-        rotate(-angle * 0.2);
-        for (let i = 0; i < 8; i++) {
-            let energyIndex = i * 4;
-            let energy = map(spectrum[energyIndex], 0, 255, 20, 50);
-            
-            push();
-            rotate(i * 45);
-            noFill();
-            for (let j = 0; j < 3; j++) {
-                stroke(220, 80, 100, 1 - j * 0.3);
-                strokeWeight(3 - j);
-                arc(0, 0, energy + j * 10, energy + j * 10, -30, 30);
-            }
-            pop();
-        }
-        pop();
     } else {
         displayStartMessage();
     }
 }
 
-class Particle {
-    constructor() {
-        this.reset();
-    }
+function drawWaveLayers() {
+    translate(-width/2, -height/2); // Reset WebGL transform for 2D drawing
+    noFill();
     
-    reset() {
-        this.angle = random(360);
-        this.radius = random(50, 200);
-        this.speed = random(0.2, 1);
-        this.size = random(2, 5);
-        this.hue = random(180, 260);
-    }
-    
-    update(bass, mid, treble) {
-        this.angle += this.speed;
-        this.radius += sin(this.angle * 0.1) * 0.5;
+    // Draw multiple wave layers with different colors and offsets
+    for (let j = 0; j < 5; j++) {
+        beginShape();
+        // Different color for each layer
+        stroke(100 + j * 30, 150 + j * 20, 255, 200 - j * 30);
+        strokeWeight(2);
         
-        if (this.radius < 30 || this.radius > 250) {
-            this.reset();
+        for (let i = 0; i < waveform.length; i++) {
+            let x = map(i, 0, waveform.length, 0, width);
+            let offset = map(j, 0, 4, 0, 100); // Vertical offset for each layer
+            let y = map(waveform[i], -1, 1, height/2 - offset, height/2 + offset);
+            vertex(x, y);
         }
-    }
-    
-    draw() {
-        let x = cos(this.angle) * this.radius;
-        let y = sin(this.angle) * this.radius;
-        
-        push();
-        translate(x, y);
-        noStroke();
-        for (let i = 0; i < 3; i++) {
-            fill(this.hue, 80, 100, 1 - i * 0.3);
-            circle(0, 0, this.size + i * 2);
-        }
-        pop();
+        endShape();
     }
 }
 
-function displayStartMessage() {
-    push();
-    translate(-width/2, -height/2);
-    textAlign(CENTER, CENTER);
-    textSize(24);
-    fill(255);
-    noStroke();
-    text('Click "Start Microphone" to begin', width/2, height/2);
-    pop();
+function drawSpectrumBars() {
+    translate(-width/2, -height/2); // Reset WebGL transform for 2D drawing
+    
+    let barWidth = width / spectrum.length;
+    for (let i = 0; i < spectrum.length; i++) {
+        let amp = spectrum[i];
+        let y = map(amp, 0, 255, height, 0);
+        
+        // Color gradient based on frequency
+        if (i < spectrum.length/3) {
+            fill(255, 0, 0, 200); // Red for low frequencies
+        } else if (i < spectrum.length * 2/3) {
+            fill(255, 255, 0, 200); // Yellow for mid frequencies
+        } else {
+            fill(0, 255, 0, 200); // Green for high frequencies
+        }
+        
+        noStroke();
+        rect(i * barWidth, y, barWidth, height - y);
+    }
+}
+
+function draw3DBlob() {
+    // Keep WebGL transform for 3D drawing
+    rotateX(frameCount * 0.01);
+    rotateY(frameCount * 0.02);
+    
+    let bassValue = fft.getEnergy("bass");
+    let midValue = fft.getEnergy("mid");
+    let trebleValue = fft.getEnergy("treble");
+    
+    // Create blob using spherical coordinates
+    noFill();
+    stroke(100, 200, 255);
+    strokeWeight(2);
+    
+    let radius = 150 + map(bassValue, 0, 255, 0, 50);
+    
+    beginShape(POINTS);
+    for (let lat = 0; lat <= 180; lat += 10) {
+        for (let lon = 0; lon <= 360; lon += 10) {
+            let x = radius * sin(lat) * cos(lon);
+            let y = radius * sin(lat) * sin(lon);
+            let z = radius * cos(lat);
+            
+            // Distort the sphere based on audio
+            let distortion = map(midValue, 0, 255, 1, 1.5);
+            let noiseVal = noise(x * 0.02 + frameCount * 0.01, 
+                               y * 0.02, 
+                               z * 0.02) * distortion;
+            
+            x *= noiseVal;
+            y *= noiseVal;
+            z *= noiseVal;
+            
+            vertex(x, y, z);
+        }
+    }
+    endShape();
+}
+
+function changeStyle(style) {
+    currentStyle = style;
+    // Reset any style-specific variables if needed
 }
 
 function toggleAudio() {
     if (!started) {
-        userStartAudio();
         mic.start();
         started = true;
         select('#startButton').html('Stop Microphone');
