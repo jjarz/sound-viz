@@ -9,7 +9,7 @@ let matrix = [];
 const PARTICLE_COUNT = 100;
 
 function setup() {
-    const canvas = createCanvas(windowWidth * 0.8, windowHeight * 0.6, WEBGL); // Fixed: WebGL -> WEBGL
+    const canvas = createCanvas(windowWidth * 0.8, windowHeight * 0.6, WEBGL);
     canvas.parent('canvas-container');
     
     mic = new p5.AudioIn();
@@ -71,7 +71,82 @@ function displayStartMessage() {
     pop();
 }
 
-// [Rest of your visualization functions remain the same...]
+function drawWaveLayers() {
+    translate(-width/2, -height/2);
+    noFill();
+    strokeWeight(2);
+    
+    for (let i = 0; i < 3; i++) {
+        beginShape();
+        for (let x = 0; x < width; x += 10) {
+            let index = floor(map(x, 0, width, 0, waveform.length));
+            let y = map(waveform[index], -1, 1, height, 0);
+            // Add offset based on layer
+            y += i * 50;
+            // Add some variation based on time
+            y += sin(frameCount * 0.05 + i) * 20;
+            
+            // Color based on amplitude and layer
+            let hue = map(y, 0, height, 0, 255);
+            stroke(hue, 255, 255);
+            
+            vertex(x, y);
+        }
+        endShape();
+    }
+}
+
+function drawSpectrumBars() {
+    translate(-width/2, -height/2);
+    let barWidth = width / spectrum.length;
+    
+    for (let i = 0; i < spectrum.length; i++) {
+        let x = i * barWidth;
+        let h = map(spectrum[i], 0, 255, 0, height);
+        
+        // Color gradient based on frequency
+        let hue = map(i, 0, spectrum.length, 0, 255);
+        fill(hue, 255, 255);
+        noStroke();
+        
+        rect(x, height, barWidth, -h);
+    }
+}
+
+function draw3DBlob() {
+    let bassValue = fft.getEnergy("bass");
+    let midValue = fft.getEnergy("mid");
+    let trebleValue = fft.getEnergy("treble");
+    
+    rotateX(frameCount * 0.01);
+    rotateY(frameCount * 0.02);
+    
+    // Create blob using spherical coordinates
+    let radius = 100 + map(bassValue, 0, 255, 0, 50);
+    
+    for (let lat = 0; lat <= 180; lat += 15) {
+        beginShape(TRIANGLE_STRIP);
+        for (let lon = 0; lon <= 360; lon += 15) {
+            let r = radius + map(noise(lon * 0.1, lat * 0.1, frameCount * 0.02), 0, 1, -20, 20);
+            r += map(midValue, 0, 255, 0, 30);
+            
+            let x = r * sin(lat) * cos(lon);
+            let y = r * sin(lat) * sin(lon);
+            let z = r * cos(lat);
+            
+            // Color based on position and audio
+            let hue = map(z, -radius, radius, 0, 255);
+            fill(hue, 255, 255, 200);
+            vertex(x, y, z);
+            
+            x = r * sin(lat + 15) * cos(lon);
+            y = r * sin(lat + 15) * sin(lon);
+            z = r * cos(lat + 15);
+            vertex(x, y, z);
+        }
+        endShape();
+    }
+}
 
 function windowResized() {
     resizeCanvas(windowWidth * 0.8, windowHeight * 0.6);
@@ -108,8 +183,6 @@ function draw() {
         displayStartMessage();
     }
 }
-
-// [Previous functions remain the same: drawWaveLayers, drawSpectrumBars, draw3DBlob]
 
 function drawParticles() {
     translate(-width/2, -height/2);
