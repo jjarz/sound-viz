@@ -4,6 +4,9 @@ let currentStyle = 1;
 let spectrum;
 let waveform;
 let angle = 0;
+let particles = [];
+let matrix = [];
+const PARTICLE_COUNT = 100;
 
 function setup() {
     const canvas = createCanvas(windowWidth * 0.8, windowHeight * 0.6, WebGL);
@@ -14,6 +17,27 @@ function setup() {
     fft.setInput(mic);
     
     colorMode(RGB);
+    
+    // Initialize particles for style 4
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+        particles.push({
+            x: random(-width/2, width/2),
+            y: random(-height/2, height/2),
+            size: random(2, 8),
+            speedX: random(-2, 2),
+            speedY: random(-2, 2)
+        });
+    }
+
+    // Initialize matrix for style 6
+    for (let i = 0; i < 30; i++) {
+        matrix[i] = {
+            x: random(width),
+            y: random(-height, 0),
+            speed: random(5, 15),
+            value: floor(random(2))
+        };
+    }
     
     const startButton = select('#startButton');
     startButton.mousePressed(toggleAudio);
@@ -36,112 +60,148 @@ function draw() {
             case 3:
                 draw3DBlob();
                 break;
-            // Add more cases for other styles
+            case 4:
+                drawParticles();
+                break;
+            case 5:
+                drawCircularSpectrum();
+                break;
+            case 6:
+                drawMatrix();
+                break;
         }
     } else {
         displayStartMessage();
     }
 }
 
-function drawWaveLayers() {
-    translate(-width/2, -height/2); // Reset WebGL transform for 2D drawing
-    noFill();
-    
-    // Draw multiple wave layers with different colors and offsets
-    for (let j = 0; j < 5; j++) {
-        beginShape();
-        // Different color for each layer
-        stroke(100 + j * 30, 150 + j * 20, 255, 200 - j * 30);
-        strokeWeight(2);
-        
-        for (let i = 0; i < waveform.length; i++) {
-            let x = map(i, 0, waveform.length, 0, width);
-            let offset = map(j, 0, 4, 0, 100); // Vertical offset for each layer
-            let y = map(waveform[i], -1, 1, height/2 - offset, height/2 + offset);
-            vertex(x, y);
-        }
-        endShape();
-    }
-}
+// [Previous functions remain the same: drawWaveLayers, drawSpectrumBars, draw3DBlob]
 
-function drawSpectrumBars() {
-    translate(-width/2, -height/2); // Reset WebGL transform for 2D drawing
-    
-    let barWidth = width / spectrum.length;
-    for (let i = 0; i < spectrum.length; i++) {
-        let amp = spectrum[i];
-        let y = map(amp, 0, 255, height, 0);
-        
-        // Color gradient based on frequency
-        if (i < spectrum.length/3) {
-            fill(255, 0, 0, 200); // Red for low frequencies
-        } else if (i < spectrum.length * 2/3) {
-            fill(255, 255, 0, 200); // Yellow for mid frequencies
-        } else {
-            fill(0, 255, 0, 200); // Green for high frequencies
-        }
-        
-        noStroke();
-        rect(i * barWidth, y, barWidth, height - y);
-    }
-}
-
-function draw3DBlob() {
-    // Keep WebGL transform for 3D drawing
-    rotateX(frameCount * 0.01);
-    rotateY(frameCount * 0.02);
-    
+function drawParticles() {
+    translate(-width/2, -height/2);
     let bassValue = fft.getEnergy("bass");
-    let midValue = fft.getEnergy("mid");
     let trebleValue = fft.getEnergy("treble");
     
-    // Create blob using spherical coordinates
-    noFill();
-    stroke(100, 200, 255);
-    strokeWeight(2);
+    // Update and draw particles
+    for (let p of particles) {
+        // Modify particle behavior based on audio
+        let speedMult = map(bassValue, 0, 255, 1, 2);
+        p.x += p.speedX * speedMult;
+        p.y += p.speedY * speedMult;
+        
+        // Create connections between nearby particles
+        for (let other of particles) {
+            let d = dist(p.x, p.y, other.x, other.y);
+            if (d < 100) {
+                stroke(0, 255, 255, map(d, 0, 100, 255, 0));
+                strokeWeight(1);
+                line(p.x, p.y, other.x, other.y);
+            }
+        }
+        
+        // Particle appearance
+        let size = p.size + map(trebleValue, 0, 255, 0, 5);
+        fill(0, 255, 255);
+        noStroke();
+        circle(p.x, p.y, size);
+        
+        // Screen wrapping
+        if (p.x < 0) p.x = width;
+        if (p.x > width) p.x = 0;
+        if (p.y < 0) p.y = height;
+        if (p.y > height) p.y = 0;
+    }
+}
+
+function drawCircularSpectrum() {
+    let bassValue = fft.getEnergy("bass");
+    let midValue = fft.getEnergy("mid");
     
-    let radius = 150 + map(bassValue, 0, 255, 0, 50);
+    // Rotate the entire visualization
+    rotateZ(frameCount * 0.01);
     
-    beginShape(POINTS);
-    for (let lat = 0; lat <= 180; lat += 10) {
-        for (let lon = 0; lon <= 360; lon += 10) {
-            let x = radius * sin(lat) * cos(lon);
-            let y = radius * sin(lat) * sin(lon);
-            let z = radius * cos(lat);
+    // Draw multiple circular layers
+    for (let layer = 0; layer < 3; layer++) {
+        let radius = 100 + layer * 50 + map(bassValue, 0, 255, 0, 30);
+        let points = spectrum.length / 3;
+        
+        beginShape();
+        noFill();
+        strokeWeight(2);
+        
+        for (let i = 0; i < points; i++) {
+            let angle = map(i, 0, points, 0, TWO_PI);
+            let amp = spectrum[i + layer * points];
+            let r = radius + map(amp, 0, 255, 0, 100);
+            let x = r * cos(angle);
+            let y = r * sin(angle);
             
-            // Distort the sphere based on audio
-            let distortion = map(midValue, 0, 255, 1, 1.5);
-            let noiseVal = noise(x * 0.02 + frameCount * 0.01, 
-                               y * 0.02, 
-                               z * 0.02) * distortion;
+            // Color based on frequency and layer
+            let hue = map(i, 0, points, 0, 255);
+            stroke(hue, 255, 255);
             
-            x *= noiseVal;
-            y *= noiseVal;
-            z *= noiseVal;
+            vertex(x, y);
             
-            vertex(x, y, z);
+            // Add some decorative elements
+            if (amp > 200) {
+                push();
+                translate(x, y);
+                rotate(angle);
+                line(0, 0, 20, 0);
+                pop();
+            }
+        }
+        endShape(CLOSE);
+    }
+}
+
+function drawMatrix() {
+    translate(-width/2, -height/2);
+    let bassValue = fft.getEnergy("bass");
+    textSize(14);
+    textAlign(CENTER, CENTER);
+    
+    // Update and draw matrix characters
+    for (let char of matrix) {
+        // Speed affected by bass
+        char.y += char.speed * map(bassValue, 0, 255, 0.5, 2);
+        
+        // Color based on position and audio
+        let greenValue = map(char.y, 0, height, 255, 50);
+        fill(0, greenValue, 0);
+        
+        // Draw character
+        text(char.value, char.x, char.y);
+        
+        // Randomly change value
+        if (random(1) < 0.1) {
+            char.value = floor(random(2));
+        }
+        
+        // Reset position when reaching bottom
+        if (char.y > height) {
+            char.y = 0;
+            char.x = random(width);
         }
     }
-    endShape();
 }
 
 function changeStyle(style) {
     currentStyle = style;
     // Reset any style-specific variables if needed
-}
-
-function toggleAudio() {
-    if (!started) {
-        mic.start();
-        started = true;
-        select('#startButton').html('Stop Microphone');
-    } else {
-        mic.stop();
-        started = false;
-        select('#startButton').html('Start Microphone');
+    if (style === 4) {
+        // Reset particles
+        particles = [];
+        for (let i = 0; i < PARTICLE_COUNT; i++) {
+            particles.push({
+                x: random(-width/2, width/2),
+                y: random(-height/2, height/2),
+                size: random(2, 8),
+                speedX: random(-2, 2),
+                speedY: random(-2, 2)
+            });
+        }
     }
 }
 
-function windowResized() {
-    resizeCanvas(windowWidth * 0.8, windowHeight * 0.6);
-}
+// [Previous functions remain the same: toggleAudio, windowResized]
