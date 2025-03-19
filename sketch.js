@@ -1,8 +1,8 @@
 let mic, fft;
 let started = false;
 let angle = 0;
-let branches = 5;
-let maxLevel = 4;
+let rings = 5;
+let particles = [];
 
 function setup() {
     const canvas = createCanvas(windowWidth * 0.8, windowHeight * 0.6);
@@ -15,122 +15,146 @@ function setup() {
     colorMode(HSB);
     angleMode(DEGREES);
     
+    // Initialize particles
+    for (let i = 0; i < 200; i++) {
+        particles.push(new Particle());
+    }
+    
     const startButton = select('#startButton');
     startButton.mousePressed(toggleAudio);
 }
 
 function draw() {
-    background(0, 0, 0, 10);
+    background(0, 0, 0, 15);
     translate(width/2, height/2);
     
     if (started) {
         let spectrum = fft.analyze();
-        let waveform = fft.waveform();
-        
-        // Calculate different frequency bands for more detailed reactivity
         let bass = fft.getEnergy("bass");
         let mid = fft.getEnergy("mid");
         let treble = fft.getEnergy("treble");
         
-        // Use bass for rotation speed
-        angle += map(bass, 0, 255, 0.2, 2);
+        // Rotate based on bass
+        angle += map(bass, 0, 255, 0.1, 1);
         
-        // Use mid frequencies for branch count
-        branches = map(mid, 0, 255, 3, 8);
-        
-        // Use treble for complexity (levels)
-        maxLevel = map(treble, 0, 255, 2, 5);
-        
-        // Draw multiple layers of fractals
-        for(let i = 0; i < 3; i++) {
+        // Draw main mandala
+        for (let ring = 0; ring < rings; ring++) {
+            let ringRadius = map(ring, 0, rings - 1, 50, 200);
+            let segments = 12 + ring * 4;
+            
             push();
-            rotate(angle * (i * 0.5));
+            rotate(angle * (ring % 2 ? -0.5 : 0.5));
             
-            // Draw main fractal
-            drawFractal(0, 0, 200 + bass, 0, 0);
-            
-            // Draw mirror fractal
-            rotate(180);
-            drawFractal(0, 0, 200 + bass, 0, 0);
+            // Draw segments
+            for (let i = 0; i < segments; i++) {
+                let segmentAngle = (360 / segments) * i;
+                let energy = map(spectrum[i % spectrum.length], 0, 255, 0.5, 1.5);
+                
+                push();
+                rotate(segmentAngle);
+                
+                // Draw geometric pattern
+                beginShape();
+                noFill();
+                for (let j = 0; j < 3; j++) {
+                    let alpha = map(j, 0, 2, 1, 0.2);
+                    stroke(200 + ring * 10, 80, 100, alpha);
+                    strokeWeight(2 - j * 0.5);
+                    
+                    let x1 = ringRadius * energy;
+                    let x2 = (ringRadius + 20) * energy;
+                    
+                    vertex(x1 * cos(0), x1 * sin(0));
+                    bezierVertex(
+                        x2 * cos(30), x2 * sin(30),
+                        x2 * cos(60), x2 * sin(60),
+                        x1 * cos(90), x1 * sin(90)
+                    );
+                }
+                endShape();
+                pop();
+            }
             pop();
         }
         
-        // Add circular audio waveform
-        push();
-        noFill();
-        beginShape();
-        for (let i = 0; i < waveform.length; i++) {
-            let r = map(waveform[i], -1, 1, 100, 200);
-            let x = r * cos(i * 360/waveform.length);
-            let y = r * sin(i * 360/waveform.length);
-            let hue = map(i, 0, waveform.length, 160, 280);
-            stroke(hue, 100, 100, 0.5);
-            vertex(x, y);
+        // Update and draw particles
+        for (let particle of particles) {
+            particle.update(bass, mid, treble);
+            particle.draw();
         }
-        endShape(CLOSE);
+        
+        // Draw center mandala
+        push();
+        rotate(-angle * 0.2);
+        for (let i = 0; i < 8; i++) {
+            let energyIndex = i * 4;
+            let energy = map(spectrum[energyIndex], 0, 255, 20, 50);
+            
+            push();
+            rotate(i * 45);
+            noFill();
+            for (let j = 0; j < 3; j++) {
+                stroke(220, 80, 100, 1 - j * 0.3);
+                strokeWeight(3 - j);
+                arc(0, 0, energy + j * 10, energy + j * 10, -30, 30);
+            }
+            pop();
+        }
         pop();
     } else {
-        // Show waiting message
+        displayStartMessage();
+    }
+}
+
+class Particle {
+    constructor() {
+        this.reset();
+    }
+    
+    reset() {
+        this.angle = random(360);
+        this.radius = random(50, 200);
+        this.speed = random(0.2, 1);
+        this.size = random(2, 5);
+        this.hue = random(180, 260);
+    }
+    
+    update(bass, mid, treble) {
+        this.angle += this.speed;
+        this.radius += sin(this.angle * 0.1) * 0.5;
+        
+        if (this.radius < 30 || this.radius > 250) {
+            this.reset();
+        }
+    }
+    
+    draw() {
+        let x = cos(this.angle) * this.radius;
+        let y = sin(this.angle) * this.radius;
+        
         push();
-        translate(-width/2, -height/2); // Reset translation for text
-        textAlign(CENTER, CENTER);
-        textSize(24);
-        fill(255);
+        translate(x, y);
         noStroke();
-        text('Click "Start Microphone" to begin', width/2, height/2);
+        for (let i = 0; i < 3; i++) {
+            fill(this.hue, 80, 100, 1 - i * 0.3);
+            circle(0, 0, this.size + i * 2);
+        }
         pop();
     }
 }
 
-function drawFractal(x, y, size, level, branchAngle) {
-    if (level >= maxLevel) return;
-    
-    // Get current audio data for visual effects
-    let spectrum = fft.analyze();
-    let energy = fft.getEnergy("bass", "treble");
-    
-    // Calculate color based on level and energy
-    let hue = map(level, 0, maxLevel, 160, 280);
-    let brightness = map(energy, 0, 255, 50, 100);
-    
-    // Draw connecting lines
-    for (let i = 0; i < branches; i++) {
-        let angle = (360 / branches) * i + branchAngle;
-        let newSize = size * 0.67;
-        
-        // Calculate end points with some wave motion
-        let endX = x + cos(angle + angle) * size;
-        let endY = y + sin(angle + angle) * size;
-        
-        // Add some wave effect based on audio
-        let wave = map(energy, 0, 255, 1, 1.5);
-        endX *= wave;
-        endY *= wave;
-        
-        // Draw line with glow effect
-        push();
-        for(let j = 3; j > 0; j--) {
-            stroke(hue, 100, brightness, 1/j);
-            strokeWeight(j * 2);
-            line(x, y, endX, endY);
-        }
-        pop();
-        
-        // Recursive call for next level
-        drawFractal(endX, endY, newSize, level + 1, angle);
-    }
-    
-    // Add central point with glow
+function displayStartMessage() {
     push();
-    for(let i = 3; i > 0; i--) {
-        fill(hue, 100, brightness, 1/i);
-        noStroke();
-        circle(x, y, i * 5);
-    }
+    translate(-width/2, -height/2);
+    textAlign(CENTER, CENTER);
+    textSize(24);
+    fill(255);
+    noStroke();
+    text('Click "Start Microphone" to begin', width/2, height/2);
     pop();
 }
 
-window.toggleAudio = function() {
+function toggleAudio() {
     if (!started) {
         userStartAudio();
         mic.start();
